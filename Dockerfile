@@ -7,13 +7,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libpq-dev libfreetype6-dev libpng-dev zlib1g-dev curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy backend source first (pip needs the full package to install)
+# Install Python deps from requirements.txt (no build step needed)
+COPY backend/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+# Copy application code
 COPY backend/ /app/backend/
-
-# Install Python deps
-RUN pip install --no-cache-dir /app/backend
-
-# Copy config and docs
 COPY config/ /app/config/
 COPY CLAUDE.md /app/CLAUDE.md
 
