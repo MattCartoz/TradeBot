@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "created": "2026-04-13T00:00:00",
+  "last_updated": "2026-04-13T00:00:00",
+  "strategies": {
+    "trend_following_breakout": {
+      "regime": "trending_up",
+      "description": "Buy breakouts above key resistance in confirmed uptrends",
+      "entry": "Price breaks above resistance with volume confirmation",
+      "exit": "Trailing stop at 2x ATR below swing high",
+      "risk_reward": 3.0,
+      "confidence": 0.5
+    },
+    "trend_following_pullback": {
+      "regime": "trending_up",
+      "description": "Buy pullbacks to EMA support in uptrends",
+      "entry": "Price pulls back to EMA20/50 and bounces with bullish candle",
+      "exit": "Target previous high, stop below pullback low",
+      "risk_reward": 2.5,
+      "confidence": 0.5
+    },
+    "short_trend_breakdown": {
+      "regime": "trending_down",
+      "description": "Short breakdowns below support in confirmed downtrends",
+      "entry": "Price breaks below support with increasing volume",
+      "exit": "Cover at next support level, stop above breakdown level",
+      "risk_reward": 2.5,
+      "confidence": 0.4
+    },
+    "mean_reversion_ranging": {
+      "regime": "ranging",
+      "description": "Buy at range support, sell at range resistance",
+      "entry": "Price touches lower Bollinger Band with RSI < 35",
+      "exit": "Target middle or upper BB, stop below range low",
+      "risk_reward": 2.0,
+      "confidence": 0.5
+    },
+    "volatility_breakout": {
+      "regime": "volatile",
+      "description": "Trade volatility expansions after compression",
+      "entry": "Bollinger Band squeeze followed by expansion with volume",
+      "exit": "Target 2x ATR move, tight stop at entry",
+      "risk_reward": 2.0,
+      "confidence": 0.4
+    },
+    "stay_flat": {
+      "regime": "dead",
+      "description": "Do nothing in dead markets. Patience is a strategy.",
+      "entry": "None — wait for regime change",
+      "exit": "N/A",
+      "risk_reward": 0,
+      "confidence": 1.0
+    }
+  },
+  "learned_rules": [],
+  "update_history": []
+}

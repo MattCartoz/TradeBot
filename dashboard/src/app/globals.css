@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0d1117;
+  --foreground: #e6edf3;
+  --card: #161b22;
+  --card-border: #30363d;
+  --accent-green: #00c853;
+  --accent-red: #ff1744;
+  --accent-cyan: #22d3ee;
+  --accent-orange: #ff9800;
+  --accent-purple: #7c4dff;
+  --muted: #8b949e;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-border: var(--card-border);
+  --color-profit: var(--accent-green);
+  --color-loss: var(--accent-red);
+  --color-cyan: var(--accent-cyan);
+  --color-orange: var(--accent-orange);
+  --color-purple: var(--accent-purple);
+  --color-muted: var(--muted);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Scrollbar styling for the trading terminal feel */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--card-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}

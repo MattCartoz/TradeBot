@@ -1,0 +1,44 @@
+exchange:
+  name: "alpaca"
+  mode: "paper"
+  symbols: ["BTC/USD", "ETH/USD"]
+  timeframes: ["1h", "4h", "1d"]
+
+cycle:
+  interval_minutes: 15
+  market_hours_only: false
+
+patience:
+  conviction_threshold: 0.7
+  min_analyst_agreement: 0.5
+  cooldown_minutes: 60
+  max_trades_per_day: 3
+
+risk:
+  max_position_size_pct: 5.0
+  max_portfolio_risk_pct: 15.0
+  max_drawdown_pct: 10.0
+  max_correlated_positions: 2
+
+llm:
+  strategist: "claude"
+  technical_analyst: "claude"
+  sentiment_analyst: "grok"
+  flow_analyst: "claude"
+  risk_manager: "claude"
+  auditor: "claude"
+
+  claude:
+    model: "claude-sonnet-4-20250514"
+    max_tokens: 4096
+
+  grok:
+    model: "grok-3"
+    max_tokens: 4096
+
+database:
+  url: "${DATABASE_URL}"
+
+dashboard:
+  host: "0.0.0.0"
+  port: 8000

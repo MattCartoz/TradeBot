@@ -1,0 +1,18 @@
+position_limits:
+  max_position_size_pct: 5.0
+  max_positions_open: 5
+  max_correlated_positions: 2
+
+drawdown_limits:
+  max_daily_drawdown_pct: 3.0
+  max_total_drawdown_pct: 10.0
+  halt_trading_on_breach: true
+
+exposure_limits:
+  max_portfolio_risk_pct: 15.0
+  max_single_asset_exposure_pct: 20.0
+
+trade_limits:
+  max_trades_per_day: 3
+  min_risk_reward_ratio: 2.0
+  max_slippage_pct: 0.5
