@@ -33,11 +33,28 @@ class MarketDataProvider:
         await self._exchange.close()
 
     async def fetch_candles(
-        self, symbol: str, timeframe: str, limit: int = 100
+        self,
+        symbol: str,
+        timeframe: str,
+        limit: int = 100,
+        drop_incomplete: bool = True,
     ) -> list[Candle]:
-        """Fetch OHLCV candles for a symbol and timeframe."""
+        """Fetch OHLCV candles for a symbol and timeframe.
+
+        Args:
+            symbol: Trading pair (e.g. "BTC/USD").
+            timeframe: Candle interval (e.g. "1h", "1d").
+            limit: Maximum number of candles to fetch.
+            drop_incomplete: If True, remove the last candle since exchanges
+                typically return the current (still-forming) candle as the
+                final element, which would skew indicator calculations.
+        """
         try:
             ohlcv = await self._exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+
+            if drop_incomplete and ohlcv:
+                ohlcv = ohlcv[:-1]
+
             return [
                 Candle(
                     timestamp=datetime.fromtimestamp(row[0] / 1000, tz=timezone.utc),

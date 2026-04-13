@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderSide as AlpacaSide, TimeInForce
@@ -140,6 +140,63 @@ class AlpacaPaperExchange(BaseExchange):
         except Exception as e:
             logger.error("Failed to cancel order %s: %s", order_id, e)
             return False
+
+    async def get_open_orders(self) -> list[dict]:
+        """Return all pending/open orders from Alpaca."""
+        if self._client is None:
+            raise RuntimeError("Exchange not initialized. Call initialize() first.")
+        try:
+            orders = self._client.get_orders(
+                filter={"status": "open"}
+            )
+            return [
+                {
+                    "order_id": str(o.id),
+                    "symbol": o.symbol,
+                    "side": str(o.side),
+                    "type": str(o.type),
+                    "quantity": float(o.qty),
+                    "limit_price": float(o.limit_price) if o.limit_price else None,
+                    "status": str(o.status),
+                    "created_at": o.created_at,
+                }
+                for o in orders
+            ]
+        except Exception as e:
+            logger.error("Failed to fetch open orders: %s", e)
+            return []
+
+    async def cancel_stale_orders(self, max_age_minutes: int = 30) -> list[str]:
+        """Cancel open orders older than *max_age_minutes*.
+
+        Returns a list of order IDs that were successfully cancelled.
+        """
+        if self._client is None:
+            raise RuntimeError("Exchange not initialized. Call initialize() first.")
+
+        open_orders = await self.get_open_orders()
+        cutoff = datetime.now(tz=timezone.utc) - timedelta(minutes=max_age_minutes)
+        cancelled: list[str] = []
+
+        for order in open_orders:
+            created_at = order["created_at"]
+            # Ensure the timestamp is timezone-aware for comparison
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+
+            if created_at < cutoff:
+                order_id = order["order_id"]
+                if await self.cancel_order(order_id):
+                    cancelled.append(order_id)
+                    logger.info(
+                        "Cancelled stale order %s (age: %s)",
+                        order_id,
+                        datetime.now(tz=timezone.utc) - created_at,
+                    )
+
+        if cancelled:
+            logger.info("Cancelled %d stale order(s)", len(cancelled))
+        return cancelled
 
     async def close(self) -> None:
         self._client = None

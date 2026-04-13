@@ -128,9 +128,9 @@ class IndicatorValues(BaseModel):
         if self.rsi_14 is not None:
             lines.append(f"  RSI(14): {self.rsi_14:.1f}")
         if self.macd_line is not None:
-            cross = "bullish" if (self.macd_histogram or 0) > 0 else "bearish"
             lines.append(
-                f"  MACD: {self.macd_line:.2f} / Signal: {self.macd_signal:.2f} ({cross})"
+                f"  MACD Line: {self.macd_line:.2f} / Signal: {self.macd_signal:.2f} "
+                f"/ Histogram: {self.macd_histogram:.2f}"
             )
         if self.bb_upper is not None:
             lines.append(
@@ -141,6 +141,5 @@ class IndicatorValues(BaseModel):
         if self.atr_14 is not None:
             lines.append(f"  ATR(14): {self.atr_14:.2f}")
         if self.adx_14 is not None:
-            strength = "strong" if self.adx_14 > 25 else "weak"
-            lines.append(f"  ADX(14): {self.adx_14:.1f} ({strength} trend)")
+            lines.append(f"  ADX(14): {self.adx_14:.1f}")
         return "\n".join(lines)

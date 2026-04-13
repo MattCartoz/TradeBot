@@ -22,19 +22,24 @@ from datetime import datetime
 from typing import Any
 
 from src.agents.auditor import Auditor
+from src.agents.debate import BullResearcher, BearResearcher, run_debate
 from src.agents.executor import Executor
 from src.agents.flow_analyst import FlowAnalyst
+from src.agents.position_manager import PositionManager
 from src.agents.risk_manager import RiskManager
 from src.agents.sentiment_analyst import SentimentAnalyst
 from src.agents.strategist import Strategist
 from src.agents.technical_analyst import TechnicalAnalyst
 from src.contracts import (
     AnalystBrief,
+    PositionAction,
+    PositionManagerOutput,
     RiskAssessment,
     RiskDecision,
     StrategyDecision,
     TradePostMortem,
 )
+from src.contracts.debate import DebateSummary
 from src.core.config import Settings
 from src.core.patience_engine import PatienceEngine
 from src.data.chart_renderer import ChartRenderer
@@ -87,10 +92,14 @@ class TradingLoop:
         self.risk_manager = RiskManager(claude_llm)
         self.executor = Executor(exchange)
         self.auditor = Auditor(claude_llm)
+        self.position_manager = PositionManager(claude_llm)
+        self.bull_researcher = BullResearcher(claude_llm)
+        self.bear_researcher = BearResearcher(claude_llm)
 
         self.patience = PatienceEngine(settings.patience)
         self.chart_renderer = ChartRenderer()
         self._running = False
+        self._notifier = None  # Set by app.py after construction
 
     # ── Event Broadcasting ──────────────────────────────────
 
@@ -301,8 +310,93 @@ class TradingLoop:
             await self._record_cycle(cycle, [], None, None, "error", "All analysts failed")
             return {"cycle": cycle, "action": "error", "reason": "All analysts failed"}
 
-        # ── Step 6: Strategist ───────────────────────────────
-        # Build current prices dict for the Strategist
+        # ── Step 5b: Position Manager (AI-driven exit management) ──
+        if self.working.positions:
+            indicator_by_symbol = {}
+            for ind in all_indicators:
+                indicator_by_symbol.setdefault(ind.symbol, []).append(ind)
+
+            pm_context = {
+                "positions": [
+                    {
+                        "symbol": p.symbol,
+                        "side": p.side,
+                        "quantity": p.quantity,
+                        "entry_price": p.entry_price,
+                        "stop_loss": p.stop_loss,
+                        "take_profit": p.take_profit,
+                        "opened_at": p.opened_at,
+                        "entry_reasoning": p.strategy_decision.get("reasoning", ""),
+                    }
+                    for p in self.working.positions.values()
+                ],
+                "current_prices": {
+                    s: {"last": snap.ticker.last, "bid": snap.ticker.bid, "ask": snap.ticker.ask}
+                    for s, snap in snapshots.items()
+                    if snap.ticker
+                },
+                "indicators": {
+                    s: [i.to_summary() for i in inds]
+                    for s, inds in indicator_by_symbol.items()
+                },
+                "market_regime": briefs[0].regime_signals.primary_signal.value if briefs else "unknown",
+                "portfolio_value": portfolio_value,
+            }
+            try:
+                pm_output = await self.position_manager.review_positions(pm_context)
+                for review in pm_output.reviews:
+                    if review.action == PositionAction.CLOSE:
+                        price = pm_context["current_prices"].get(review.symbol, {}).get("last", 0)
+                        if price and review.symbol in self.working.positions:
+                            await self.emit_event("position_manager_close", {
+                                "symbol": review.symbol,
+                                "reasoning": review.reasoning[:200],
+                            })
+                            pos = self.working.positions[review.symbol]
+                            await self._close_and_audit_position(pos, price, "position_manager")
+                    elif review.action == PositionAction.ADJUST_STOP and review.new_stop_loss:
+                        if review.symbol in self.working.positions:
+                            self.working.positions[review.symbol].stop_loss = review.new_stop_loss
+                            await self.emit_event("stop_adjusted", {
+                                "symbol": review.symbol,
+                                "new_stop": review.new_stop_loss,
+                                "reasoning": review.reasoning[:200],
+                            })
+                    elif review.action == PositionAction.TAKE_PARTIAL and review.partial_close_pct:
+                        await self.emit_event("partial_take", {
+                            "symbol": review.symbol,
+                            "pct": review.partial_close_pct,
+                            "reasoning": review.reasoning[:200],
+                        })
+            except Exception as e:
+                logger.error("Position Manager failed: %s", e, exc_info=True)
+
+        # ── Step 5c: Cancel stale orders ─────────────────────
+        try:
+            cancelled = await self.exchange.cancel_stale_orders(max_age_minutes=30)
+            if cancelled:
+                await self.emit_event("stale_orders_cancelled", {"count": len(cancelled)})
+        except Exception as e:
+            logger.warning("Stale order cancellation failed: %s", e)
+
+        # ── Step 6: Bull/Bear Debate ─────────────────────────
+        debate_summary = None
+        try:
+            debate_summary = await run_debate(
+                bull=self.bull_researcher,
+                bear=self.bear_researcher,
+                analyst_briefs=briefs,
+            )
+            await self.emit_event("debate_complete", {
+                "consensus": debate_summary.consensus_direction,
+                "agreement": debate_summary.agreement_level,
+                "bull_conviction": debate_summary.bull_argument.conviction,
+                "bear_conviction": debate_summary.bear_argument.conviction,
+            })
+        except Exception as e:
+            logger.warning("Debate failed (continuing without): %s", e)
+
+        # ── Step 7: Strategist ───────────────────────────────
         current_prices = {}
         for symbol, snap in snapshots.items():
             if snap.ticker:
@@ -321,6 +415,9 @@ class TradingLoop:
             "portfolio_value": portfolio_value,
             "current_prices": current_prices,
         }
+        if debate_summary:
+            strategy_context["debate_summary"] = debate_summary.model_dump(mode="json")
+
         decision = await self.strategist.invoke(strategy_context, StrategyDecision)
         await self.emit_event("strategy_decision", {
             "regime": decision.market_regime.value,

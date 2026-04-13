@@ -30,6 +30,9 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "websockets>=13.0",
+
+    # Notifications
+    "python-telegram-bot>=21.0,<22.0",
 ]
 
 [project.optional-dependencies]

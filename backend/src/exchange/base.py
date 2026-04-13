@@ -35,5 +35,13 @@ class BaseExchange(ABC):
         """Cancel a pending order. Returns True if successful."""
 
     @abstractmethod
+    async def get_open_orders(self) -> list[dict]:
+        """Return all pending/open orders."""
+
+    @abstractmethod
+    async def cancel_stale_orders(self, max_age_minutes: int = 30) -> list[str]:
+        """Cancel orders older than *max_age_minutes*. Returns cancelled order IDs."""
+
+    @abstractmethod
     async def close(self) -> None:
         """Clean up resources."""

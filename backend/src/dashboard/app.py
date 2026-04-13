@@ -23,17 +23,25 @@ from src.llm.grok_provider import GrokProvider
 from src.memory.episodic import EpisodicMemory
 from src.memory.semantic import SemanticMemory
 from src.memory.working import WorkingMemory
+from src.notifications.telegram_bot import TelegramNotifier
 
 logger = logging.getLogger(__name__)
 
 # Global state
 _trading_loop: TradingLoop | None = None
+_telegram: TelegramNotifier | None = None
 _ws_clients: set[WebSocket] = set()
 _working_memory = WorkingMemory()
 
+# Event types that trigger Telegram notifications
+_TRADE_EVENTS = {"trade_executed"}
+_CLOSE_EVENTS = {"position_closed"}
+_CYCLE_EVENTS = {"cycle_start"}
+_ERROR_EVENTS = {"cycle_error", "agent_error"}
+
 
 async def broadcast_event(event: dict) -> None:
-    """Broadcast an event to all connected WebSocket clients."""
+    """Broadcast an event to all connected WebSocket clients and Telegram."""
     message = json.dumps(event, default=str)
     disconnected = set()
     for ws in _ws_clients:
@@ -42,6 +50,21 @@ async def broadcast_event(event: dict) -> None:
         except Exception:
             disconnected.add(ws)
     _ws_clients -= disconnected
+
+    # Forward relevant events to Telegram (fire-and-forget)
+    if _telegram and _telegram.enabled:
+        event_type = event.get("type", "")
+        try:
+            if event_type in _TRADE_EVENTS:
+                await _telegram.notify_trade(event)
+            elif event_type in _CLOSE_EVENTS:
+                await _telegram.notify_position_closed(event)
+            elif event_type in _ERROR_EVENTS:
+                await _telegram.notify_error(
+                    f"[{event_type}] {event.get('error', 'unknown')}"
+                )
+        except Exception:
+            logger.debug("Telegram notification failed (non-critical)", exc_info=True)
 
 
 @asynccontextmanager
@@ -90,10 +113,19 @@ async def lifespan(app: FastAPI):
         event_callback=broadcast_event,
     )
 
+    # Start Telegram bot (non-blocking -- runs on the same event loop)
+    global _telegram
+    _telegram = TelegramNotifier(
+        api_base_url=f"http://127.0.0.1:{settings.dashboard.port}",
+    )
+    await _telegram.start()
+
     logger.info("TradeBot backend ready")
     yield
 
     # Shutdown
+    if _telegram:
+        await _telegram.stop()
     if _trading_loop:
         _trading_loop.stop()
     await market_data.close()

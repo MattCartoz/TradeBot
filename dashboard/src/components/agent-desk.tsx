@@ -17,6 +17,10 @@ import {
   LogOut,
   BookOpen,
   Database,
+  MessageSquare,
+  ArrowUpDown,
+  ScissorsLineDashed,
+  Trash2,
 } from "lucide-react";
 import { useAgentFeed } from "@/hooks/use-websocket";
 import type { AgentEvent } from "@/lib/types";
@@ -35,6 +39,11 @@ const AGENT_ICONS: Record<string, React.ReactNode> = {
   playbook_updated: <BookOpen size={12} />,
   stop_loss_triggered: <AlertTriangle size={12} />,
   take_profit_triggered: <Target size={12} />,
+  debate_complete: <MessageSquare size={12} />,
+  stop_adjusted: <ArrowUpDown size={12} />,
+  partial_take: <ScissorsLineDashed size={12} />,
+  position_manager_close: <LogOut size={12} />,
+  stale_orders_cancelled: <Trash2 size={12} />,
   cycle_error: <AlertTriangle size={12} />,
   agent_error: <XCircle size={12} />,
 };
@@ -149,6 +158,36 @@ function formatEvent(event: AgentEvent): {
       detail: `${e.chart_images} charts, ${e.indicators} indicator sets, F&G: ${e.fear_greed}`,
       color: "text-text-tertiary",
       icon: <Database size={12} />,
+    };
+  }
+
+  if (type === "debate_complete") {
+    const e = event as { consensus: string; agreement: number; bull_conviction: number; bear_conviction: number };
+    return {
+      title: "Bull/Bear Debate",
+      detail: `Consensus: ${e.consensus}  Agreement: ${e.agreement?.toFixed(2)}  Bull: ${e.bull_conviction?.toFixed(2)} vs Bear: ${e.bear_conviction?.toFixed(2)}`,
+      color: "text-text-secondary",
+      icon: <MessageSquare size={12} />,
+    };
+  }
+
+  if (type === "stop_adjusted") {
+    const e = event as { symbol: string; new_stop: number; reasoning: string };
+    return {
+      title: "Stop Adjusted",
+      detail: `${e.symbol} new stop: $${e.new_stop?.toLocaleString()}  ${e.reasoning}`,
+      color: "text-warning",
+      icon: <ArrowUpDown size={12} />,
+    };
+  }
+
+  if (type === "position_manager_close") {
+    const e = event as { symbol: string; reasoning: string };
+    return {
+      title: "Position Manager Exit",
+      detail: `${e.symbol}  ${e.reasoning}`,
+      color: "text-loss",
+      icon: <LogOut size={12} />,
     };
   }
 

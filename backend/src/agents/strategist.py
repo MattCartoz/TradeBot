@@ -75,10 +75,17 @@ CRITICAL RULES:
                     f"Vol24h={price_data['volume_24h']:,.0f}"
                 )
 
+        if "debate_summary" in context:
+            parts.append(f"\n{'='*60}")
+            parts.append("BULL/BEAR DEBATE SUMMARY")
+            parts.append(f"{'='*60}")
+            parts.append(json.dumps(context["debate_summary"], indent=2, default=str))
+
         parts.append(
-            "\nBased on all analyst briefs, current prices, and the playbook, "
-            "what is your strategic decision? "
+            "\nBased on all analyst briefs, the bull/bear debate, current prices, "
+            "and the playbook, what is your strategic decision? "
             "Use the CURRENT PRICES above for your entry_price, target_price, and stop_loss. "
+            "Weigh the bull and bear arguments carefully. "
             "Remember: the default is HOLD. Only propose a trade if conviction is high."
         )
 
