@@ -124,16 +124,38 @@ app.add_middleware(
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "cycle": _working_memory.cycle_count}
+    components = {
+        "trading_loop": _trading_loop is not None,
+        "positions": len(_working_memory.positions),
+    }
+    return {
+        "status": "ok" if _trading_loop else "degraded",
+        "cycle": _working_memory.cycle_count,
+        "components": components,
+    }
 
 
 @app.get("/api/portfolio")
 async def get_portfolio():
+    # Calculate portfolio risk: sum of (position_value / portfolio * distance_to_stop)
+    risk_pct = 0.0
+    pv = _working_memory.portfolio_value
+    if pv > 0:
+        for pos in _working_memory.positions.values():
+            pos_value = pos.entry_price * pos.quantity
+            if pos.stop_loss and pos.entry_price > 0:
+                stop_distance = abs(pos.entry_price - pos.stop_loss) / pos.entry_price
+                risk_pct += (pos_value / pv) * stop_distance * 100
+            else:
+                # No stop-loss = full position at risk
+                risk_pct += (pos_value / pv) * 100
+
     return {
         "value": _working_memory.portfolio_value,
         "cash": _working_memory.cash_balance,
         "drawdown_pct": _working_memory.current_drawdown_pct,
         "peak_value": _working_memory.peak_portfolio_value,
+        "risk_pct": round(risk_pct, 2),
         "positions": {k: vars(v) for k, v in _working_memory.positions.items()},
     }
 

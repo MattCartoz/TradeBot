@@ -78,6 +78,26 @@ class SemanticMemory:
                 "source": update.reasoning,
             })
 
+            # Actually modify strategies if the update targets one
+            strategies = self._playbook.get("strategies", {})
+            target = update.target.lower().replace(" ", "_")
+
+            if update.update_type == "adjust_threshold" and target in strategies:
+                # Update confidence score based on auditor feedback
+                strategies[target]["last_auditor_note"] = update.change
+                strategies[target]["last_updated"] = datetime.utcnow().isoformat()
+            elif update.update_type == "modify_strategy" and target in strategies:
+                # Modify an existing strategy's description or parameters
+                strategies[target]["description"] = update.change
+                strategies[target]["last_updated"] = datetime.utcnow().isoformat()
+            elif update.update_type == "add_rule":
+                # New rules get added to learned_rules (already done above)
+                # but also flag the target strategy if it exists
+                if target in strategies:
+                    if "notes" not in strategies[target]:
+                        strategies[target]["notes"] = []
+                    strategies[target]["notes"].append(update.change)
+
         # Bump version
         version = self._playbook.get("version", 0)
         self._playbook["version"] = version + 1

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from src.contracts import RiskAssessment
+from src.contracts import ExecutionOrder, RiskAssessment
 
 from .base import BaseAgent
 
@@ -38,7 +38,28 @@ CRITICAL RULES:
 - You may MODIFY a trade — reduce position size, tighten stops, etc.
 - You CANNOT modify the strategy itself. Only risk parameters.
 - Be the adult in the room. Enthusiasm from other agents is not your concern.
-- Document every veto reason clearly — this protects the portfolio."""
+- Document every veto reason clearly — this protects the portfolio.
+
+HOW TO CALCULATE FIELDS:
+- portfolio_risk_after: Estimate total % of portfolio at risk after this trade.
+  Formula: (sum of all position sizes * distance to stop as %) / portfolio value.
+  If unsure, estimate conservatively (higher = safer to veto).
+- max_drawdown_remaining: max_drawdown_pct limit minus current drawdown.
+- correlation_check: true if the proposed symbol is NOT highly correlated with
+  existing positions. BTC and ETH are correlated. Set false if doubling up.
+
+HOW TO BUILD approved_order (only when decision is "approved" or "modified"):
+- symbol: Copy from the proposed trade
+- side: "buy" or "sell"
+- order_type: "limit" for entries with a specific price, "market" for immediate
+- quantity: Calculate as (portfolio_value * position_size_pct / 100) / entry_price
+- limit_price: The entry price from the proposed trade (null for market orders)
+- stop_price: null (handled separately)
+- take_profit: The target price from the proposed trade
+- stop_loss: The stop-loss price from the proposed trade
+- time_in_force: "gtc"
+
+If decision is "vetoed", set approved_order to null."""
 
     def _format_context(self, context: dict[str, Any]) -> str:
         parts = ["Evaluate the following trade proposal against risk limits:\n"]
@@ -73,7 +94,8 @@ CRITICAL RULES:
 
         parts.append(
             "\nEvaluate this trade against all risk limits. "
-            "Remember: your default is VETO. The trade must earn approval."
+            "Remember: your default is VETO. The trade must earn approval. "
+            "If approved, construct the approved_order with calculated quantity."
         )
 
         return "\n".join(parts)

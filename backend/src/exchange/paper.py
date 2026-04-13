@@ -45,7 +45,8 @@ class AlpacaPaperExchange(BaseExchange):
         )
 
     async def get_balance(self) -> dict[str, float]:
-        assert self._client is not None
+        if self._client is None:
+            raise RuntimeError("Exchange not initialized. Call initialize() first.")
         account = self._client.get_account()
         return {
             "USD": float(account.cash),
@@ -54,12 +55,14 @@ class AlpacaPaperExchange(BaseExchange):
         }
 
     async def get_portfolio_value(self) -> float:
-        assert self._client is not None
+        if self._client is None:
+            raise RuntimeError("Exchange not initialized. Call initialize() first.")
         account = self._client.get_account()
         return float(account.portfolio_value)
 
     async def get_positions(self) -> list[dict]:
-        assert self._client is not None
+        if self._client is None:
+            raise RuntimeError("Exchange not initialized. Call initialize() first.")
         positions = self._client.get_all_positions()
         return [
             {
@@ -76,7 +79,8 @@ class AlpacaPaperExchange(BaseExchange):
         ]
 
     async def submit_order(self, order: ExecutionOrder) -> FillReport:
-        assert self._client is not None
+        if self._client is None:
+            raise RuntimeError("Exchange not initialized. Call initialize() first.")
 
         alpaca_side = AlpacaSide.BUY if order.side == OrderSide.BUY else AlpacaSide.SELL
         symbol = order.symbol.replace("/", "")  # BTC/USD -> BTCUSD
@@ -128,7 +132,8 @@ class AlpacaPaperExchange(BaseExchange):
             )
 
     async def cancel_order(self, order_id: str) -> bool:
-        assert self._client is not None
+        if self._client is None:
+            raise RuntimeError("Exchange not initialized. Call initialize() first.")
         try:
             self._client.cancel_order_by_id(order_id)
             return True

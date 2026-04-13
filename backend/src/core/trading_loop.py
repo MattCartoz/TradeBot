@@ -302,12 +302,24 @@ class TradingLoop:
             return {"cycle": cycle, "action": "error", "reason": "All analysts failed"}
 
         # ── Step 6: Strategist ───────────────────────────────
+        # Build current prices dict for the Strategist
+        current_prices = {}
+        for symbol, snap in snapshots.items():
+            if snap.ticker:
+                current_prices[symbol] = {
+                    "last": snap.ticker.last,
+                    "bid": snap.ticker.bid,
+                    "ask": snap.ticker.ask,
+                    "volume_24h": snap.ticker.volume_24h,
+                }
+
         playbook = self.semantic.get_playbook()
         strategy_context = {
             "analyst_briefs": [b.model_dump(mode="json") for b in briefs],
             "playbook": playbook,
             "current_positions": positions,
             "portfolio_value": portfolio_value,
+            "current_prices": current_prices,
         }
         decision = await self.strategist.invoke(strategy_context, StrategyDecision)
         await self.emit_event("strategy_decision", {
@@ -456,22 +468,16 @@ class TradingLoop:
         self, pos: Position, exit_price: float, exit_reason: str
     ) -> None:
         """Close a position, record it, and run the Auditor post-mortem."""
-        pnl = (exit_price - pos.entry_price) * pos.quantity
-        if pos.side == "sell":
-            pnl = -pnl
-        pnl_pct = (pnl / (pos.entry_price * pos.quantity)) * 100 if pos.entry_price else 0
+        # PnL: long = (exit - entry), short = (entry - exit)
+        if pos.side == "buy":
+            pnl = (exit_price - pos.entry_price) * pos.quantity
+        else:
+            pnl = (pos.entry_price - exit_price) * pos.quantity
+        cost_basis = pos.entry_price * pos.quantity
+        pnl_pct = (pnl / cost_basis) * 100 if cost_basis > 0 else 0
 
         # Remove from working memory
         self.working.close_position(pos.symbol)
-
-        # Record trade close in episodic memory
-        if pos.trade_id:
-            await self.episodic.record_trade_close(
-                trade_id=pos.trade_id,
-                exit_price=exit_price,
-                pnl=pnl,
-                pnl_pct=pnl_pct,
-            )
 
         await self.emit_event("position_closed", {
             "symbol": pos.symbol,
@@ -482,17 +488,17 @@ class TradingLoop:
         })
 
         # ── Auditor post-mortem ──────────────────────────────
+        hold_minutes = 0.0
         try:
-            opened = pos.opened_at
-            closed = datetime.utcnow().isoformat()
-            hold_minutes = 0
-            try:
-                hold_minutes = (
-                    datetime.fromisoformat(closed) - datetime.fromisoformat(opened)
-                ).total_seconds() / 60
-            except Exception:
-                pass
+            hold_minutes = (
+                datetime.fromisoformat(datetime.utcnow().isoformat())
+                - datetime.fromisoformat(pos.opened_at)
+            ).total_seconds() / 60
+        except Exception:
+            pass
 
+        post_mortem_dict = None
+        try:
             audit_context = {
                 "trade_data": {
                     "trade_id": pos.trade_id,
@@ -515,16 +521,7 @@ class TradingLoop:
             }
 
             post_mortem = await self.auditor.invoke(audit_context, TradePostMortem)
-
-            # Update episodic memory with post-mortem
-            if pos.trade_id:
-                await self.episodic.record_trade_close(
-                    trade_id=pos.trade_id,
-                    exit_price=exit_price,
-                    pnl=pnl,
-                    pnl_pct=pnl_pct,
-                    post_mortem=post_mortem.model_dump(mode="json"),
-                )
+            post_mortem_dict = post_mortem.model_dump(mode="json")
 
             # Apply playbook updates from Auditor
             if post_mortem.playbook_updates:
@@ -550,6 +547,16 @@ class TradingLoop:
         except Exception as e:
             logger.error("Auditor failed for %s: %s", pos.symbol, e, exc_info=True)
             await self.emit_event("agent_error", {"agent": "auditor", "error": str(e)})
+
+        # Always record the close — even if auditor fails
+        if pos.trade_id:
+            await self.episodic.record_trade_close(
+                trade_id=pos.trade_id,
+                exit_price=exit_price,
+                pnl=pnl,
+                pnl_pct=pnl_pct,
+                post_mortem=post_mortem_dict,
+            )
 
     # ── Cycle Recording ─────────────────────────────────────
 

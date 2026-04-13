@@ -79,5 +79,6 @@ export interface Portfolio {
   cash: number;
   drawdown_pct: number;
   peak_value: number;
+  risk_pct: number;
   positions: Record<string, Position>;
 }

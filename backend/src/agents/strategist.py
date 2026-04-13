@@ -64,8 +64,21 @@ CRITICAL RULES:
         if "portfolio_value" in context:
             parts.append(f"\nPORTFOLIO VALUE: ${context['portfolio_value']:,.2f}")
 
+        if "current_prices" in context:
+            parts.append(f"\n{'='*60}")
+            parts.append("CURRENT MARKET PRICES")
+            parts.append(f"{'='*60}")
+            for symbol, price_data in context["current_prices"].items():
+                parts.append(
+                    f"  {symbol}: Last=${price_data['last']:,.2f} "
+                    f"Bid=${price_data['bid']:,.2f} Ask=${price_data['ask']:,.2f} "
+                    f"Vol24h={price_data['volume_24h']:,.0f}"
+                )
+
         parts.append(
-            "\nBased on all analyst briefs and the playbook, what is your strategic decision? "
+            "\nBased on all analyst briefs, current prices, and the playbook, "
+            "what is your strategic decision? "
+            "Use the CURRENT PRICES above for your entry_price, target_price, and stop_loss. "
             "Remember: the default is HOLD. Only propose a trade if conviction is high."
         )
 

@@ -10,7 +10,7 @@ import logging
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Float, String, Text, func
+from sqlalchemy import Column, DateTime, Float, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
@@ -48,7 +48,7 @@ class AnalysisCycleRecord(Base):
     __tablename__ = "analysis_cycles"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    cycle_number = Column(Float, index=True)
+    cycle_number = Column(Integer, index=True)
     timestamp = Column(DateTime, default=func.now())
     analyst_briefs = Column(JSONB)
     strategy_decision = Column(JSONB)
@@ -109,10 +109,15 @@ class EpisodicMemory:
         post_mortem: dict | None = None,
     ) -> None:
         """Record a trade closing with outcome."""
+        try:
+            parsed_id = uuid.UUID(trade_id)
+        except (ValueError, AttributeError):
+            logger.error("Invalid trade_id for close: %s", trade_id)
+            return
         async with self._session_factory() as session:
             from sqlalchemy import select
             result = await session.execute(
-                select(TradeRecord).where(TradeRecord.id == uuid.UUID(trade_id))
+                select(TradeRecord).where(TradeRecord.id == parsed_id)
             )
             trade = result.scalar_one_or_none()
             if trade:

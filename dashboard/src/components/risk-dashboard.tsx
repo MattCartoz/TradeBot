@@ -101,7 +101,7 @@ export function RiskDashboard() {
 
         <ProgressBar
           label="Portfolio Risk"
-          value={0}
+          value={portfolio?.risk_pct || 0}
           max={risk.max_portfolio_risk_pct || 15}
         />
 
