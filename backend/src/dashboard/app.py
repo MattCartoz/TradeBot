@@ -101,6 +101,19 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Database init failed (may work without connection): %s", e)
 
+    # Crash recovery — reconcile saved state with exchange reality
+    try:
+        from src.core.recovery import RecoveryManager
+        recovery = RecoveryManager()
+        report = await recovery.recover(_working_memory, exchange)
+        if report.actions_taken:
+            logger.info(
+                "Recovery: %d actions taken — %s",
+                len(report.actions_taken), "; ".join(report.actions_taken),
+            )
+    except Exception as e:
+        logger.warning("Recovery failed (continuing with saved state): %s", e)
+
     _trading_loop = TradingLoop(
         settings=settings,
         market_data=market_data,
@@ -113,15 +126,25 @@ async def lifespan(app: FastAPI):
         event_callback=broadcast_event,
     )
 
-    # Start Telegram bot (non-blocking -- runs on the same event loop)
+    # Start Telegram bot (non-blocking — runs on the same event loop)
     global _telegram
     _telegram = TelegramNotifier(
         api_base_url=f"http://127.0.0.1:{settings.dashboard.port}",
     )
     await _telegram.start()
 
-    logger.info("TradeBot backend ready")
+    # AUTO-START the trading loop — no human intervention needed
+    _loop_task = asyncio.create_task(_trading_loop.run())
+    logger.info("TradeBot backend ready — trading loop auto-started")
+
     yield
+
+    # Cancel the loop task on shutdown
+    _loop_task.cancel()
+    try:
+        await _loop_task
+    except asyncio.CancelledError:
+        pass
 
     # Shutdown
     if _telegram:

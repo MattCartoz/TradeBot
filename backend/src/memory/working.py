@@ -80,7 +80,7 @@ class WorkingMemory:
             self.agent_logs = self.agent_logs[-200:]
 
     def save_to_disk(self) -> None:
-        """Persist state to JSON for crash recovery."""
+        """Persist state to JSON for crash recovery (atomic write)."""
         WORKING_MEMORY_FILE.parent.mkdir(parents=True, exist_ok=True)
         data = {
             "positions": {k: vars(v) for k, v in self.positions.items()},
@@ -91,7 +91,11 @@ class WorkingMemory:
             "cycle_count": self.cycle_count,
             "last_cycle_time": self.last_cycle_time.isoformat() if self.last_cycle_time else None,
         }
-        WORKING_MEMORY_FILE.write_text(json.dumps(data, indent=2, default=str))
+        # Atomic write: write to temp file, then rename.
+        # This prevents corruption if the process is killed mid-write.
+        tmp_path = WORKING_MEMORY_FILE.with_suffix(".tmp")
+        tmp_path.write_text(json.dumps(data, indent=2, default=str))
+        tmp_path.replace(WORKING_MEMORY_FILE)
 
     def load_from_disk(self) -> None:
         """Restore state from disk after restart."""

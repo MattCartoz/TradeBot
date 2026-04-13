@@ -3,6 +3,7 @@ version: "3.9"
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: tradebot
       POSTGRES_PASSWORD: tradebot_dev
@@ -21,6 +22,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    restart: unless-stopped
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://tradebot:tradebot_dev@db:5432/tradebot
@@ -29,15 +31,23 @@ services:
     volumes:
       - ./backend/src:/app/src
       - ./config:/app/config
+      - backend-data:/app/data
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; r = httpx.get('http://localhost:8000/api/health'); r.raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     command: uvicorn src.dashboard.app:app --host 0.0.0.0 --port 8000 --reload
 
   dashboard:
     build:
       context: ./dashboard
       dockerfile: Dockerfile
+    restart: unless-stopped
     ports:
       - "3000:3000"
     volumes:
@@ -50,3 +60,4 @@ services:
 
 volumes:
   pgdata:
+  backend-data:

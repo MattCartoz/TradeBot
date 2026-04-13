@@ -363,6 +363,28 @@ class TradingLoop:
                                 "reasoning": review.reasoning[:200],
                             })
                     elif review.action == PositionAction.TAKE_PARTIAL and review.partial_close_pct:
+                        if review.symbol in self.working.positions:
+                            pos = self.working.positions[review.symbol]
+                            partial_qty = pos.quantity * review.partial_close_pct
+                            if partial_qty > 0:
+                                from src.contracts import ExecutionOrder, OrderSide, OrderType
+                                close_side = OrderSide.SELL if pos.side == "buy" else OrderSide.BUY
+                                partial_order = ExecutionOrder(
+                                    symbol=pos.symbol,
+                                    side=close_side,
+                                    order_type=OrderType.MARKET,
+                                    quantity=partial_qty,
+                                )
+                                try:
+                                    fill = await self.exchange.submit_order(partial_order)
+                                    if fill.filled_quantity > 0:
+                                        pos.quantity -= fill.filled_quantity
+                                        logger.info(
+                                            "Partial close %s: sold %.6f, remaining %.6f",
+                                            pos.symbol, fill.filled_quantity, pos.quantity,
+                                        )
+                                except Exception as e:
+                                    logger.error("Partial close failed for %s: %s", review.symbol, e)
                         await self.emit_event("partial_take", {
                             "symbol": review.symbol,
                             "pct": review.partial_close_pct,
@@ -564,7 +586,35 @@ class TradingLoop:
     async def _close_and_audit_position(
         self, pos: Position, exit_price: float, exit_reason: str
     ) -> None:
-        """Close a position, record it, and run the Auditor post-mortem."""
+        """Close a position on the exchange, record it, and run Auditor post-mortem."""
+        from src.contracts import ExecutionOrder, OrderSide, OrderType
+
+        # Submit a MARKET order to close the position on the exchange
+        close_side = OrderSide.SELL if pos.side == "buy" else OrderSide.BUY
+        close_order = ExecutionOrder(
+            symbol=pos.symbol,
+            side=close_side,
+            order_type=OrderType.MARKET,
+            quantity=pos.quantity,
+        )
+        try:
+            fill = await self.exchange.submit_order(close_order)
+            if fill.filled_quantity > 0:
+                exit_price = fill.average_fill_price  # Use actual fill price
+                logger.info(
+                    "Closed %s on exchange: %s %.6f @ $%.2f",
+                    pos.symbol, close_side.value, fill.filled_quantity, exit_price,
+                )
+            else:
+                logger.warning(
+                    "Close order for %s did not fill — status: %s",
+                    pos.symbol, fill.status.value,
+                )
+        except Exception as e:
+            logger.error("Failed to close %s on exchange: %s", pos.symbol, e)
+            # Continue with memory cleanup even if exchange close fails
+            # The position will be caught by recovery on next startup
+
         # PnL: long = (exit - entry), short = (entry - exit)
         if pos.side == "buy":
             pnl = (exit_price - pos.entry_price) * pos.quantity
