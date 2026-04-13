@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { API_URL, formatUSD, formatPct } from "@/lib/utils";
 import type { Trade } from "@/lib/types";
 
@@ -14,7 +15,7 @@ export function TradeHistory() {
         const res = await fetch(`${API_URL}/api/trades`);
         if (res.ok) setTrades(await res.json());
       } catch {
-        // backend not connected
+        /* offline */
       }
     };
     fetchTrades();
@@ -24,86 +25,93 @@ export function TradeHistory() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 py-2 border-b border-card-border">
-        <h2 className="text-sm font-semibold tracking-wide">TRADE HISTORY</h2>
+      <div className="px-5 py-3">
+        <h2 className="text-[13px] font-semibold text-text-primary">
+          Trade History
+        </h2>
       </div>
 
-      <div className="flex-1 overflow-auto">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="text-muted border-b border-card-border">
-              <th className="text-left px-4 py-2 font-medium">Symbol</th>
-              <th className="text-left px-2 py-2 font-medium">Side</th>
-              <th className="text-right px-2 py-2 font-medium">Entry</th>
-              <th className="text-right px-2 py-2 font-medium">Exit</th>
-              <th className="text-right px-2 py-2 font-medium">P&L</th>
-              <th className="text-right px-4 py-2 font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {trades.length === 0 && (
-              <tr>
-                <td colSpan={6} className="text-center py-8 text-muted">
-                  No trades yet — the desk is patient
-                </td>
-              </tr>
-            )}
-            {trades.map((trade) => (
-              <tr
-                key={trade.id}
-                className="border-b border-card-border/30 hover:bg-card-border/20 cursor-pointer"
-                onClick={() =>
-                  setExpandedId(expandedId === trade.id ? null : trade.id)
-                }
-              >
-                <td className="px-4 py-2 font-mono font-semibold">
-                  {trade.symbol}
-                </td>
-                <td className="px-2 py-2">
-                  <span
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                      trade.side === "buy"
-                        ? "bg-profit/20 text-profit"
-                        : "bg-loss/20 text-loss"
-                    }`}
+      <div className="flex-1 overflow-auto px-5">
+        {trades.length === 0 ? (
+          <div className="flex items-center justify-center h-32">
+            <p className="text-[13px] text-text-tertiary">
+              No trades yet
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-px">
+            {trades.map((trade) => {
+              const expanded = expandedId === trade.id;
+              return (
+                <div key={trade.id}>
+                  <button
+                    onClick={() => setExpandedId(expanded ? null : trade.id)}
+                    className="w-full flex items-center justify-between py-2.5 border-b border-border text-left group"
                   >
-                    {trade.side.toUpperCase()}
-                  </span>
-                </td>
-                <td className="px-2 py-2 text-right font-mono">
-                  {formatUSD(trade.entry_price)}
-                </td>
-                <td className="px-2 py-2 text-right font-mono">
-                  {trade.exit_price ? formatUSD(trade.exit_price) : "—"}
-                </td>
-                <td
-                  className={`px-2 py-2 text-right font-mono font-semibold ${
-                    trade.pnl !== null
-                      ? trade.pnl >= 0
-                        ? "text-profit"
-                        : "text-loss"
-                      : "text-muted"
-                  }`}
-                >
-                  {trade.pnl !== null ? formatUSD(trade.pnl) : "Open"}
-                </td>
-                <td className="px-4 py-2 text-right">
-                  <span
-                    className={`text-[10px] px-1.5 py-0.5 rounded ${
-                      trade.status === "open"
-                        ? "bg-cyan/20 text-cyan"
-                        : trade.pnl !== null && trade.pnl >= 0
-                          ? "bg-profit/20 text-profit"
-                          : "bg-loss/20 text-loss"
-                    }`}
-                  >
-                    {trade.status.toUpperCase()}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                    <div className="flex items-center gap-3">
+                      <ChevronRight
+                        size={12}
+                        className={`text-text-tertiary transition-transform ${
+                          expanded ? "rotate-90" : ""
+                        }`}
+                      />
+                      <div>
+                        <span className="text-[13px] font-mono font-semibold text-text-primary">
+                          {trade.symbol}
+                        </span>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span
+                            className={`text-[10px] font-medium uppercase ${
+                              trade.side === "buy" ? "text-profit" : "text-loss"
+                            }`}
+                          >
+                            {trade.side}
+                          </span>
+                          <span className="text-[11px] text-text-tertiary">
+                            {formatUSD(trade.entry_price)}
+                          </span>
+                          {trade.exit_price && (
+                            <>
+                              <span className="text-[11px] text-text-tertiary">
+                                &rarr;
+                              </span>
+                              <span className="text-[11px] text-text-tertiary">
+                                {formatUSD(trade.exit_price)}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      {trade.pnl !== null ? (
+                        <span
+                          className={`text-[13px] font-mono font-semibold ${
+                            trade.pnl >= 0 ? "text-profit" : "text-loss"
+                          }`}
+                        >
+                          {formatUSD(trade.pnl)}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-medium text-accent">
+                          Open
+                        </span>
+                      )}
+                    </div>
+                  </button>
+
+                  {expanded && trade.post_mortem && (
+                    <div className="pl-8 pr-4 py-3 bg-bg-secondary rounded-[var(--radius-sm)] mb-2 mt-1">
+                      <p className="text-[11px] text-text-secondary leading-relaxed">
+                        {JSON.stringify(trade.post_mortem, null, 2)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

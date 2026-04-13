@@ -2,57 +2,72 @@
 
 import { useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import {
+  BarChart3,
+  Search,
+  Target,
+  Pause,
+  ShieldCheck,
+  ShieldX,
+  Zap,
+  AlertTriangle,
+  XCircle,
+  Circle,
+} from "lucide-react";
 import { useAgentFeed } from "@/hooks/use-websocket";
 import type { AgentEvent } from "@/lib/types";
 
-const AGENT_ICONS: Record<string, string> = {
-  cycle_start: "\u23F1",
-  analyst_brief: "\uD83D\uDCCA",
-  analyst_phase: "\uD83D\uDD0D",
-  strategy_decision: "\uD83C\uDFAF",
-  patience_block: "\u23F8",
-  risk_assessment: "\uD83D\uDEE1\uFE0F",
-  trade_executed: "\u26A1",
-  cycle_error: "\u26A0\uFE0F",
-  agent_error: "\u274C",
+const AGENT_ICONS: Record<string, React.ReactNode> = {
+  cycle_start: <Circle size={12} />,
+  analyst_brief: <BarChart3 size={12} />,
+  analyst_phase: <Search size={12} />,
+  strategy_decision: <Target size={12} />,
+  patience_block: <Pause size={12} />,
+  risk_assessment: <ShieldCheck size={12} />,
+  trade_executed: <Zap size={12} />,
+  cycle_error: <AlertTriangle size={12} />,
+  agent_error: <XCircle size={12} />,
 };
 
 const AGENT_COLORS: Record<string, string> = {
-  technical_analyst: "text-cyan",
-  sentiment_analyst: "text-orange",
-  flow_analyst: "text-purple",
+  technical_analyst: "text-accent",
+  sentiment_analyst: "text-warning",
+  flow_analyst: "text-[#bf5af2]",
   strategist: "text-profit",
   risk_manager: "text-loss",
-  executor: "text-foreground",
+  executor: "text-text-primary",
 };
 
-function formatEvent(event: AgentEvent): { title: string; detail: string; color: string } {
+function formatEvent(event: AgentEvent): {
+  title: string;
+  detail: string;
+  color: string;
+  icon: React.ReactNode;
+} {
   const type = event.type;
+  const icon = AGENT_ICONS[type] || <Circle size={12} />;
 
   if (type === "cycle_start") {
-    return {
-      title: `Cycle #${event.cycle} Starting`,
-      detail: "",
-      color: "text-muted",
-    };
+    return { title: `Cycle ${event.cycle}`, detail: "", color: "text-text-tertiary", icon };
   }
 
   if (type === "analyst_brief") {
     const e = event as { agent: string; conviction: number; regime: string; reasoning: string };
     return {
       title: e.agent.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-      detail: `Regime: ${e.regime} | Conviction: ${e.conviction?.toFixed(2)} — ${e.reasoning}`,
-      color: AGENT_COLORS[e.agent] || "text-foreground",
+      detail: `${e.regime}  ${e.conviction?.toFixed(2)} conviction  ${e.reasoning}`,
+      color: AGENT_COLORS[e.agent] || "text-text-primary",
+      icon,
     };
   }
 
   if (type === "strategy_decision") {
     const e = event as { regime: string; action: string; symbol: string; conviction: number; reasoning: string };
-    const passed = e.conviction >= 0.7;
     return {
       title: "Strategist",
-      detail: `Regime: ${e.regime} | Action: ${e.action?.toUpperCase()} ${e.symbol} | Conviction: ${e.conviction?.toFixed(2)} ${passed ? "\u2705" : "\u274C"} — ${e.reasoning}`,
+      detail: `${e.action?.toUpperCase()} ${e.symbol}  ${e.conviction?.toFixed(2)} conviction  ${e.reasoning}`,
       color: "text-profit",
+      icon: <Target size={12} />,
     };
   }
 
@@ -61,32 +76,36 @@ function formatEvent(event: AgentEvent): { title: string; detail: string; color:
     const approved = e.decision === "approved";
     return {
       title: "Risk Manager",
-      detail: `${approved ? "\u2705 APPROVED" : "\u274C VETOED"} — ${approved ? e.reasoning : e.veto_reasons?.join("; ")}`,
+      detail: approved ? e.reasoning : e.veto_reasons?.join(". "),
       color: approved ? "text-profit" : "text-loss",
+      icon: approved ? <ShieldCheck size={12} /> : <ShieldX size={12} />,
     };
   }
 
   if (type === "patience_block") {
     return {
       title: "Patience Engine",
-      detail: `\u23F8 ${(event as { reason: string }).reason}`,
-      color: "text-orange",
+      detail: (event as { reason: string }).reason,
+      color: "text-text-secondary",
+      icon: <Pause size={12} />,
     };
   }
 
   if (type === "trade_executed") {
     const e = event as { symbol: string; side: string; quantity: number; price: number };
     return {
-      title: "Executor",
+      title: "Executed",
       detail: `${e.side?.toUpperCase()} ${e.quantity} ${e.symbol} @ $${e.price?.toLocaleString()}`,
-      color: "text-cyan",
+      color: "text-accent",
+      icon: <Zap size={12} />,
     };
   }
 
   return {
-    title: type,
-    detail: JSON.stringify(event),
-    color: "text-muted",
+    title: type.replace(/_/g, " "),
+    detail: "",
+    color: "text-text-tertiary",
+    icon,
   };
 }
 
@@ -102,57 +121,61 @@ export function AgentDesk() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-card-border">
-        <h2 className="text-sm font-semibold tracking-wide">AGENT DESK</h2>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between px-5 py-3">
+        <h2 className="text-[13px] font-semibold text-text-primary">
+          Agent Activity
+        </h2>
+        <div className="flex items-center gap-1.5">
           <span
-            className={`h-2 w-2 rounded-full ${connected ? "bg-profit" : "bg-loss"}`}
+            className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-profit" : "bg-loss"}`}
           />
-          <span className="text-xs text-muted">
-            {connected ? "Live" : "Disconnected"}
+          <span className="text-[11px] text-text-tertiary">
+            {connected ? "Connected" : "Offline"}
           </span>
         </div>
       </div>
 
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto px-4 py-2 space-y-1"
-      >
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 pb-4">
         {events.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-muted">
-            <p className="text-sm">Waiting for trading cycle...</p>
-            <p className="text-xs mt-1">
-              Start the loop via POST /api/start or click Run Cycle
+          <div className="flex flex-col items-center justify-center h-full gap-2">
+            <p className="text-[13px] text-text-tertiary">Waiting for activity</p>
+            <p className="text-[11px] text-text-tertiary/60">
+              Run a cycle to see agent reasoning here
             </p>
           </div>
         )}
 
         <AnimatePresence initial={false}>
           {events.map((event, i) => {
-            const { title, detail, color } = formatEvent(event);
-            const icon = AGENT_ICONS[event.type] || "\u2022";
+            const { title, detail, color, icon } = formatEvent(event);
 
             return (
               <motion.div
                 key={`${event.timestamp}-${i}`}
-                initial={{ opacity: 0, y: 8 }}
+                initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2 }}
-                className="py-1.5 border-b border-card-border/50 last:border-0"
+                transition={{ duration: 0.15 }}
+                className="py-2.5 border-b border-border last:border-0"
               >
-                <div className="flex items-start gap-2">
-                  <span className="text-sm flex-shrink-0 mt-0.5">{icon}</span>
-                  <div className="min-w-0">
+                <div className="flex items-start gap-2.5">
+                  <span className={`mt-0.5 flex-shrink-0 ${color}`}>
+                    {icon}
+                  </span>
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className={`text-xs font-semibold ${color}`}>
+                      <span className={`text-[12px] font-medium ${color}`}>
                         {title}
                       </span>
-                      <span className="text-[10px] font-mono text-muted">
-                        {new Date(event.timestamp).toLocaleTimeString()}
+                      <span className="text-[10px] font-mono text-text-tertiary">
+                        {new Date(event.timestamp).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                        })}
                       </span>
                     </div>
                     {detail && (
-                      <p className="text-xs text-muted/80 mt-0.5 leading-relaxed truncate">
+                      <p className="text-[11px] text-text-secondary mt-0.5 leading-relaxed line-clamp-2">
                         {detail}
                       </p>
                     )}

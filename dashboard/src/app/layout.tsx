@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { ThemeProvider } from "@/lib/theme";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,9 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TradeBot — Multi-Agent Trading Floor",
-  description:
-    "AI-powered multi-agent trading system with specialist agents that analyze, strategize, and execute trades",
+  title: "TradeBot",
+  description: "Multi-agent AI trading floor",
 };
 
 export default function RootLayout({
@@ -27,9 +27,10 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-background text-foreground">
-        {children}
+      <body className="min-h-full">
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

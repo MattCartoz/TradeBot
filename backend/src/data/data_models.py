@@ -33,6 +33,51 @@ class Ticker(BaseModel):
         return (self.bid + self.ask) / 2
 
 
+class OrderBookLevel(BaseModel):
+    """Single price level in the order book."""
+
+    price: float
+    volume: float
+
+
+class OrderBook(BaseModel):
+    """Order book depth snapshot."""
+
+    symbol: str
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    bids: list[OrderBookLevel] = Field(default_factory=list)
+    asks: list[OrderBookLevel] = Field(default_factory=list)
+
+    def to_summary(self) -> str:
+        """Human-readable summary for LLM context."""
+        lines = [f"Order Book for {self.symbol}:"]
+        if self.bids:
+            total_bid_vol = sum(b.volume for b in self.bids)
+            top_bid = self.bids[0]
+            lines.append(f"  Best bid: ${top_bid.price:,.2f} (qty: {top_bid.volume:.4f})")
+            lines.append(f"  Total bid depth ({len(self.bids)} levels): {total_bid_vol:.4f}")
+            # Identify large bid walls
+            avg_vol = total_bid_vol / len(self.bids) if self.bids else 0
+            walls = [b for b in self.bids if b.volume > avg_vol * 3]
+            if walls:
+                lines.append(f"  Large bid walls at: {', '.join(f'${w.price:,.2f} ({w.volume:.4f})' for w in walls[:3])}")
+        if self.asks:
+            total_ask_vol = sum(a.volume for a in self.asks)
+            top_ask = self.asks[0]
+            lines.append(f"  Best ask: ${top_ask.price:,.2f} (qty: {top_ask.volume:.4f})")
+            lines.append(f"  Total ask depth ({len(self.asks)} levels): {total_ask_vol:.4f}")
+            walls = [a for a in self.asks if a.volume > (total_ask_vol / len(self.asks)) * 3]
+            if walls:
+                lines.append(f"  Large ask walls at: {', '.join(f'${w.price:,.2f} ({w.volume:.4f})' for w in walls[:3])}")
+        if self.bids and self.asks:
+            bid_vol = sum(b.volume for b in self.bids)
+            ask_vol = sum(a.volume for a in self.asks)
+            imbalance = bid_vol / (bid_vol + ask_vol) if (bid_vol + ask_vol) > 0 else 0.5
+            bias = "BUY pressure" if imbalance > 0.55 else "SELL pressure" if imbalance < 0.45 else "balanced"
+            lines.append(f"  Bid/Ask imbalance: {imbalance:.2f} ({bias})")
+        return "\n".join(lines)
+
+
 class MarketSnapshot(BaseModel):
     """Complete market data package for one symbol, multiple timeframes."""
 
@@ -43,6 +88,7 @@ class MarketSnapshot(BaseModel):
         default_factory=dict,
         description="Keyed by timeframe, e.g. {'1h': [...], '4h': [...]}",
     )
+    order_book: OrderBook | None = None
 
 
 class IndicatorValues(BaseModel):

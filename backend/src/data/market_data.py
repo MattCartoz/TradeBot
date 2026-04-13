@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 import ccxt.async_support as ccxt
 
-from .data_models import Candle, MarketSnapshot, Ticker
+from .data_models import Candle, MarketSnapshot, OrderBook, OrderBookLevel, Ticker
 
 logger = logging.getLogger(__name__)
 
@@ -68,14 +68,30 @@ class MarketDataProvider:
             logger.error("Failed to fetch ticker for %s: %s", symbol, e)
             return None
 
+    async def fetch_order_book(self, symbol: str, limit: int = 25) -> OrderBook | None:
+        """Fetch order book depth — bids and asks with volumes."""
+        try:
+            data = await self._exchange.fetch_order_book(symbol, limit=limit)
+            return OrderBook(
+                symbol=symbol,
+                bids=[OrderBookLevel(price=b[0], volume=b[1]) for b in data.get("bids", [])],
+                asks=[OrderBookLevel(price=a[0], volume=a[1]) for a in data.get("asks", [])],
+            )
+        except Exception as e:
+            logger.warning("Failed to fetch order book for %s: %s", symbol, e)
+            return None
+
     async def fetch_snapshot(
         self, symbol: str, timeframes: list[str], candle_limit: int = 100
     ) -> MarketSnapshot:
         """Fetch complete market data for a symbol across all timeframes."""
         ticker = await self.fetch_ticker(symbol)
+        order_book = await self.fetch_order_book(symbol)
         candles: dict[str, list[Candle]] = {}
 
         for tf in timeframes:
             candles[tf] = await self.fetch_candles(symbol, tf, limit=candle_limit)
 
-        return MarketSnapshot(symbol=symbol, ticker=ticker, candles=candles)
+        return MarketSnapshot(
+            symbol=symbol, ticker=ticker, candles=candles, order_book=order_book
+        )
