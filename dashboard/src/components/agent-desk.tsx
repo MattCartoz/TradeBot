@@ -71,7 +71,7 @@ function formatEvent(event: AgentEvent): {
   }
 
   if (type === "analyst_brief") {
-    const e = event as { agent: string; conviction: number; regime: string; reasoning: string };
+    const e = event as unknown as { agent: string; conviction: number; regime: string; reasoning: string };
     return {
       title: e.agent.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
       detail: `${e.regime}  ${e.conviction?.toFixed(2)} conviction  ${e.reasoning}`,
@@ -81,7 +81,7 @@ function formatEvent(event: AgentEvent): {
   }
 
   if (type === "strategy_decision") {
-    const e = event as { regime: string; action: string; symbol: string; conviction: number; reasoning: string };
+    const e = event as unknown as { regime: string; action: string; symbol: string; conviction: number; reasoning: string };
     return {
       title: "Strategist",
       detail: `${e.action?.toUpperCase()} ${e.symbol}  ${e.conviction?.toFixed(2)} conviction  ${e.reasoning}`,
@@ -91,7 +91,7 @@ function formatEvent(event: AgentEvent): {
   }
 
   if (type === "risk_assessment") {
-    const e = event as { decision: string; reasoning: string; veto_reasons: string[] };
+    const e = event as unknown as { decision: string; reasoning: string; veto_reasons: string[] };
     const approved = e.decision === "approved";
     return {
       title: "Risk Manager",
@@ -104,14 +104,14 @@ function formatEvent(event: AgentEvent): {
   if (type === "patience_block") {
     return {
       title: "Patience Engine",
-      detail: (event as { reason: string }).reason,
+      detail: (event as unknown as { reason: string }).reason,
       color: "text-text-secondary",
       icon: <Pause size={12} />,
     };
   }
 
   if (type === "trade_executed") {
-    const e = event as { symbol: string; side: string; quantity: number; price: number };
+    const e = event as unknown as { symbol: string; side: string; quantity: number; price: number };
     return {
       title: "Executed",
       detail: `${e.side?.toUpperCase()} ${e.quantity} ${e.symbol} @ $${e.price?.toLocaleString()}`,
@@ -121,7 +121,7 @@ function formatEvent(event: AgentEvent): {
   }
 
   if (type === "position_closed") {
-    const e = event as { symbol: string; pnl: number; pnl_pct: number; reason: string };
+    const e = event as unknown as { symbol: string; pnl: number; pnl_pct: number; reason: string };
     const win = e.pnl >= 0;
     return {
       title: "Position Closed",
@@ -132,7 +132,7 @@ function formatEvent(event: AgentEvent): {
   }
 
   if (type === "post_mortem") {
-    const e = event as { symbol: string; outcome: string; lessons: string[] };
+    const e = event as unknown as { symbol: string; outcome: string; lessons: string[] };
     return {
       title: "Auditor Review",
       detail: `${e.symbol} ${e.outcome}  ${e.lessons?.[0] || ""}`,
@@ -142,7 +142,7 @@ function formatEvent(event: AgentEvent): {
   }
 
   if (type === "playbook_updated") {
-    const e = event as { updates: number; new_version: number };
+    const e = event as unknown as { updates: number; new_version: number };
     return {
       title: "Playbook Updated",
       detail: `${e.updates} new rules applied, now v${e.new_version}`,
@@ -152,7 +152,7 @@ function formatEvent(event: AgentEvent): {
   }
 
   if (type === "data_collected") {
-    const e = event as { symbols: string[]; chart_images: number; indicators: number; fear_greed: string };
+    const e = event as unknown as { symbols: string[]; chart_images: number; indicators: number; fear_greed: string };
     return {
       title: "Data Collected",
       detail: `${e.chart_images} charts, ${e.indicators} indicator sets, F&G: ${e.fear_greed}`,
@@ -162,7 +162,7 @@ function formatEvent(event: AgentEvent): {
   }
 
   if (type === "debate_complete") {
-    const e = event as { consensus: string; agreement: number; bull_conviction: number; bear_conviction: number };
+    const e = event as unknown as { consensus: string; agreement: number; bull_conviction: number; bear_conviction: number };
     return {
       title: "Bull/Bear Debate",
       detail: `Consensus: ${e.consensus}  Agreement: ${e.agreement?.toFixed(2)}  Bull: ${e.bull_conviction?.toFixed(2)} vs Bear: ${e.bear_conviction?.toFixed(2)}`,
@@ -172,7 +172,7 @@ function formatEvent(event: AgentEvent): {
   }
 
   if (type === "stop_adjusted") {
-    const e = event as { symbol: string; new_stop: number; reasoning: string };
+    const e = event as unknown as { symbol: string; new_stop: number; reasoning: string };
     return {
       title: "Stop Adjusted",
       detail: `${e.symbol} new stop: $${e.new_stop?.toLocaleString()}  ${e.reasoning}`,
@@ -182,7 +182,7 @@ function formatEvent(event: AgentEvent): {
   }
 
   if (type === "position_manager_close") {
-    const e = event as { symbol: string; reasoning: string };
+    const e = event as unknown as { symbol: string; reasoning: string };
     return {
       title: "Position Manager Exit",
       detail: `${e.symbol}  ${e.reasoning}`,

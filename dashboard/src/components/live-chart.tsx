@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   createChart,
+  CandlestickSeries,
   type IChartApi,
   type ISeriesApi,
   ColorType,
@@ -67,7 +68,7 @@ export function LiveChart() {
     });
     chartRef.current = chart;
 
-    const series = chart.addCandlestickSeries({
+    const series = chart.addSeries(CandlestickSeries, {
       upColor: t.up,
       downColor: t.down,
       borderUpColor: t.up,
