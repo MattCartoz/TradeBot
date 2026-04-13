@@ -43,29 +43,49 @@ CRITICAL RULES:
         self,
         chart_images: list[tuple[str, str]],  # [(base64_png, "BTC/USD 4h"), ...]
         indicators: list[IndicatorValues],
-        candle_summaries: dict[str, str],  # symbol -> summary text
+        candle_summaries: dict[str, str],  # symbol -> multi-line summary
+        ohlcv_json: dict[str, dict] | None = None,  # symbol -> {tf -> candle dicts}
+        order_book_summaries: dict[str, str] | None = None,  # symbol -> summary
     ) -> AnalystBrief:
-        """Run technical analysis with chart vision + indicator data.
+        """Run technical analysis with chart vision + indicator data + OHLCV + depth.
 
         Args:
             chart_images: List of (base64_png, label) tuples for vision analysis.
             indicators: Computed indicator values per symbol/timeframe.
             candle_summaries: Text summaries of recent price action.
+            ohlcv_json: Raw OHLCV candle data per symbol/timeframe (last 20 candles).
+            order_book_summaries: Order book depth summaries per symbol.
         """
         if chart_images:
             images = [ImageContent(base64_data=b64) for b64, _ in chart_images]
             labels = [label for _, label in chart_images]
 
             text_parts = [
-                "Analyze these charts and the following indicator data.\n",
+                "Analyze these charts and the following market data.\n",
                 "Charts provided: " + ", ".join(labels) + "\n\n",
             ]
 
+            # Indicator summaries
             for ind in indicators:
                 text_parts.append(ind.to_summary() + "\n\n")
 
+            # Recent candle action
             for symbol, summary in candle_summaries.items():
-                text_parts.append(f"Recent price action for {symbol}:\n{summary}\n\n")
+                text_parts.append(f"{summary}\n\n")
+
+            # Order book depth
+            if order_book_summaries:
+                text_parts.append("ORDER BOOK DEPTH:\n")
+                for symbol, obs in order_book_summaries.items():
+                    text_parts.append(f"{obs}\n\n")
+
+            # Raw OHLCV (abbreviated — last 20 candles of primary timeframe)
+            if ohlcv_json:
+                text_parts.append("RAW OHLCV DATA (last 20 candles, primary timeframe):\n")
+                for symbol, tfs in ohlcv_json.items():
+                    for tf, candles in tfs.items():
+                        text_parts.append(f"{symbol} {tf}: {json.dumps(candles[:5], default=str)}...\n")
+                        break  # Only first timeframe to save tokens
 
             text_content = "\n".join(text_parts)
 

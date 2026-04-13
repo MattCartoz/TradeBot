@@ -101,6 +101,8 @@ async def lifespan(app: FastAPI):
     await claude.close()
     await grok.close()
     await episodic.close()
+    from src.data.external_sources import close_client as close_http_client
+    await close_http_client()
 
 
 app = FastAPI(

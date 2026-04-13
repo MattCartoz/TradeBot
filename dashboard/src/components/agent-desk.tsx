@@ -13,6 +13,10 @@ import {
   AlertTriangle,
   XCircle,
   Circle,
+  FileText,
+  LogOut,
+  BookOpen,
+  Database,
 } from "lucide-react";
 import { useAgentFeed } from "@/hooks/use-websocket";
 import type { AgentEvent } from "@/lib/types";
@@ -21,10 +25,16 @@ const AGENT_ICONS: Record<string, React.ReactNode> = {
   cycle_start: <Circle size={12} />,
   analyst_brief: <BarChart3 size={12} />,
   analyst_phase: <Search size={12} />,
+  data_collected: <Database size={12} />,
   strategy_decision: <Target size={12} />,
   patience_block: <Pause size={12} />,
   risk_assessment: <ShieldCheck size={12} />,
   trade_executed: <Zap size={12} />,
+  position_closed: <LogOut size={12} />,
+  post_mortem: <FileText size={12} />,
+  playbook_updated: <BookOpen size={12} />,
+  stop_loss_triggered: <AlertTriangle size={12} />,
+  take_profit_triggered: <Target size={12} />,
   cycle_error: <AlertTriangle size={12} />,
   agent_error: <XCircle size={12} />,
 };
@@ -98,6 +108,47 @@ function formatEvent(event: AgentEvent): {
       detail: `${e.side?.toUpperCase()} ${e.quantity} ${e.symbol} @ $${e.price?.toLocaleString()}`,
       color: "text-accent",
       icon: <Zap size={12} />,
+    };
+  }
+
+  if (type === "position_closed") {
+    const e = event as { symbol: string; pnl: number; pnl_pct: number; reason: string };
+    const win = e.pnl >= 0;
+    return {
+      title: "Position Closed",
+      detail: `${e.symbol} ${e.reason}  $${e.pnl?.toFixed(2)} (${e.pnl_pct?.toFixed(1)}%)`,
+      color: win ? "text-profit" : "text-loss",
+      icon: <LogOut size={12} />,
+    };
+  }
+
+  if (type === "post_mortem") {
+    const e = event as { symbol: string; outcome: string; lessons: string[] };
+    return {
+      title: "Auditor Review",
+      detail: `${e.symbol} ${e.outcome}  ${e.lessons?.[0] || ""}`,
+      color: "text-text-secondary",
+      icon: <FileText size={12} />,
+    };
+  }
+
+  if (type === "playbook_updated") {
+    const e = event as { updates: number; new_version: number };
+    return {
+      title: "Playbook Updated",
+      detail: `${e.updates} new rules applied, now v${e.new_version}`,
+      color: "text-accent",
+      icon: <BookOpen size={12} />,
+    };
+  }
+
+  if (type === "data_collected") {
+    const e = event as { symbols: string[]; chart_images: number; indicators: number; fear_greed: string };
+    return {
+      title: "Data Collected",
+      detail: `${e.chart_images} charts, ${e.indicators} indicator sets, F&G: ${e.fear_greed}`,
+      color: "text-text-tertiary",
+      icon: <Database size={12} />,
     };
   }
 
