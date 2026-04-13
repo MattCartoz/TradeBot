@@ -297,6 +297,58 @@ async def get_config():
     return settings.model_dump()
 
 
+@app.get("/api/stats")
+async def get_stats():
+    """Trading performance statistics."""
+    if _trading_loop:
+        try:
+            return await _trading_loop.episodic.get_trade_stats()
+        except Exception as e:
+            logger.error("Failed to fetch trade stats: %s", e)
+    return {
+        "total_trades": 0, "winning_trades": 0, "losing_trades": 0,
+        "win_rate": 0.0, "total_pnl": 0.0, "avg_win": 0.0, "avg_loss": 0.0,
+        "largest_win": 0.0, "largest_loss": 0.0, "profit_factor": 0.0,
+        "avg_hold_minutes": 0.0, "open_trades": 0,
+    }
+
+
+@app.get("/api/equity-curve")
+async def get_equity_curve():
+    """Cumulative P&L over time."""
+    if _trading_loop:
+        try:
+            return await _trading_loop.episodic.get_equity_curve()
+        except Exception as e:
+            logger.error("Failed to fetch equity curve: %s", e)
+    return []
+
+
+@app.get("/api/cycle-stats")
+async def get_cycle_stats():
+    """Analysis cycle statistics (trades/holds/vetoes/errors)."""
+    if _trading_loop:
+        try:
+            return await _trading_loop.episodic.get_cycle_stats()
+        except Exception as e:
+            logger.error("Failed to fetch cycle stats: %s", e)
+    return {
+        "total_cycles": 0, "trades_made": 0, "holds": 0,
+        "vetoed": 0, "errors": 0, "recent_regimes": [],
+    }
+
+
+@app.get("/api/recent-cycles")
+async def get_recent_cycles():
+    """Recent analysis cycle summaries."""
+    if _trading_loop:
+        try:
+            return await _trading_loop.episodic.get_recent_cycles()
+        except Exception as e:
+            logger.error("Failed to fetch recent cycles: %s", e)
+    return []
+
+
 @app.post("/api/run-cycle")
 async def run_single_cycle():
     """Manually trigger one analysis cycle."""

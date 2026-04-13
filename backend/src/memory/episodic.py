@@ -10,7 +10,7 @@ import logging
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Float, Integer, String, Text, func
+from sqlalchemy import Column, DateTime, Float, Integer, String, Text, func, select
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
@@ -115,7 +115,6 @@ class EpisodicMemory:
             logger.error("Invalid trade_id for close: %s", trade_id)
             return
         async with self._session_factory() as session:
-            from sqlalchemy import select
             result = await session.execute(
                 select(TradeRecord).where(TradeRecord.id == parsed_id)
             )
@@ -156,7 +155,6 @@ class EpisodicMemory:
     async def get_recent_trades(self, limit: int = 20) -> list[dict]:
         """Get recent trades for dashboard."""
         async with self._session_factory() as session:
-            from sqlalchemy import select
             result = await session.execute(
                 select(TradeRecord)
                 .order_by(TradeRecord.opened_at.desc())
@@ -180,6 +178,181 @@ class EpisodicMemory:
                 }
                 for t in trades
             ]
+
+    async def get_trade_stats(self) -> dict:
+        """Calculate trading performance statistics."""
+        async with self._session_factory() as session:
+            # Closed trades
+            result = await session.execute(
+                select(TradeRecord).where(TradeRecord.status == "closed")
+            )
+            closed = result.scalars().all()
+
+            # Open trades count
+            open_result = await session.execute(
+                select(func.count()).select_from(TradeRecord).where(
+                    TradeRecord.status == "open"
+                )
+            )
+            open_trades = open_result.scalar() or 0
+
+        total = len(closed)
+        if total == 0:
+            return {
+                "total_trades": 0,
+                "winning_trades": 0,
+                "losing_trades": 0,
+                "win_rate": 0.0,
+                "total_pnl": 0.0,
+                "avg_win": 0.0,
+                "avg_loss": 0.0,
+                "largest_win": 0.0,
+                "largest_loss": 0.0,
+                "profit_factor": 0.0,
+                "avg_hold_minutes": 0.0,
+                "open_trades": open_trades,
+            }
+
+        wins = [t for t in closed if (t.pnl or 0) > 0]
+        losses = [t for t in closed if (t.pnl or 0) <= 0]
+        win_pnls = [t.pnl for t in wins]
+        loss_pnls = [t.pnl for t in losses]
+
+        gross_profit = sum(win_pnls) if win_pnls else 0.0
+        gross_loss = abs(sum(loss_pnls)) if loss_pnls else 0.0
+
+        # Average hold time in minutes
+        hold_times = []
+        for t in closed:
+            if t.opened_at and t.closed_at:
+                delta = (t.closed_at - t.opened_at).total_seconds() / 60.0
+                hold_times.append(delta)
+
+        return {
+            "total_trades": total,
+            "winning_trades": len(wins),
+            "losing_trades": len(losses),
+            "win_rate": round(len(wins) / total * 100, 2) if total else 0.0,
+            "total_pnl": round(sum(t.pnl or 0 for t in closed), 2),
+            "avg_win": round(sum(win_pnls) / len(win_pnls), 2) if win_pnls else 0.0,
+            "avg_loss": round(sum(loss_pnls) / len(loss_pnls), 2) if loss_pnls else 0.0,
+            "largest_win": round(max(win_pnls), 2) if win_pnls else 0.0,
+            "largest_loss": round(min(loss_pnls), 2) if loss_pnls else 0.0,
+            "profit_factor": round(gross_profit / gross_loss, 2) if gross_loss > 0 else float("inf") if gross_profit > 0 else 0.0,
+            "avg_hold_minutes": round(sum(hold_times) / len(hold_times), 2) if hold_times else 0.0,
+            "open_trades": open_trades,
+        }
+
+    async def get_equity_curve(self) -> list[dict]:
+        """Get cumulative P&L over time for equity curve chart."""
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(TradeRecord)
+                .where(TradeRecord.status == "closed")
+                .order_by(TradeRecord.closed_at.asc())
+            )
+            closed = result.scalars().all()
+
+        cumulative = 0.0
+        curve = []
+        for t in closed:
+            cumulative += t.pnl or 0
+            curve.append({
+                "time": t.closed_at.isoformat() if t.closed_at else None,
+                "pnl": round(cumulative, 2),
+            })
+        return curve
+
+    async def get_cycle_stats(self) -> dict:
+        """Get analysis cycle statistics."""
+        async with self._session_factory() as session:
+            # Total cycles
+            total_result = await session.execute(
+                select(func.count()).select_from(AnalysisCycleRecord)
+            )
+            total_cycles = total_result.scalar() or 0
+
+            # Count by action_taken
+            trades_result = await session.execute(
+                select(func.count()).select_from(AnalysisCycleRecord).where(
+                    AnalysisCycleRecord.action_taken == "trade"
+                )
+            )
+            trades_made = trades_result.scalar() or 0
+
+            holds_result = await session.execute(
+                select(func.count()).select_from(AnalysisCycleRecord).where(
+                    AnalysisCycleRecord.action_taken == "hold"
+                )
+            )
+            holds = holds_result.scalar() or 0
+
+            vetoed_result = await session.execute(
+                select(func.count()).select_from(AnalysisCycleRecord).where(
+                    AnalysisCycleRecord.action_taken == "vetoed"
+                )
+            )
+            vetoed = vetoed_result.scalar() or 0
+
+            errors_result = await session.execute(
+                select(func.count()).select_from(AnalysisCycleRecord).where(
+                    AnalysisCycleRecord.action_taken == "error"
+                )
+            )
+            errors = errors_result.scalar() or 0
+
+            # Recent regime classifications from strategy_decision JSONB
+            regime_result = await session.execute(
+                select(AnalysisCycleRecord.strategy_decision)
+                .where(AnalysisCycleRecord.strategy_decision.isnot(None))
+                .order_by(AnalysisCycleRecord.timestamp.desc())
+                .limit(10)
+            )
+            regime_rows = regime_result.scalars().all()
+            recent_regimes = []
+            for sd in regime_rows:
+                if isinstance(sd, dict):
+                    regime = sd.get("regime") or sd.get("market_regime")
+                    if regime:
+                        recent_regimes.append(regime)
+
+        return {
+            "total_cycles": total_cycles,
+            "trades_made": trades_made,
+            "holds": holds,
+            "vetoed": vetoed,
+            "errors": errors,
+            "recent_regimes": recent_regimes,
+        }
+
+    async def get_recent_cycles(self, limit: int = 20) -> list[dict]:
+        """Get recent analysis cycles for activity log."""
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(AnalysisCycleRecord)
+                .order_by(AnalysisCycleRecord.timestamp.desc())
+                .limit(limit)
+            )
+            cycles = result.scalars().all()
+
+        return [
+            {
+                "cycle_number": c.cycle_number,
+                "timestamp": c.timestamp.isoformat() if c.timestamp else None,
+                "action_taken": c.action_taken,
+                "reasoning": c.reasoning,
+                "strategy_decision": (
+                    {
+                        k: v
+                        for k, v in c.strategy_decision.items()
+                        if k in ("action", "regime", "market_regime", "confidence", "symbol")
+                    }
+                    if isinstance(c.strategy_decision, dict)
+                    else c.strategy_decision
+                ),
+            }
+            for c in cycles
+        ]
 
     async def close(self) -> None:
         await self._engine.dispose()
