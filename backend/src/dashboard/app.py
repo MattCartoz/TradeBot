@@ -70,96 +70,137 @@ async def broadcast_event(event: dict) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup and shutdown."""
-    global _trading_loop
+    global _trading_loop, _telegram
 
-    settings = load_settings()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
+    logger.info("TradeBot starting up...")
 
-    # Initialize components
-    market_data = MarketDataProvider(settings.exchange.name, sandbox=True)
-    exchange = AlpacaPaperExchange(paper=True)
-    claude = ClaudeProvider(model=settings.llm.claude.model)
-    grok = GrokProvider(model=settings.llm.grok.model)
-    episodic = EpisodicMemory(settings.database.url)
-    semantic = SemanticMemory()
-
-    _working_memory.load_from_disk()
-    semantic.load()
+    _loop_task = None
 
     try:
-        await market_data.initialize()
-    except Exception as e:
-        logger.warning("Market data init failed (may work without API keys): %s", e)
+        settings = load_settings()
 
-    try:
-        await exchange.initialize()
-    except Exception as e:
-        logger.warning("Exchange init failed (may work without API keys): %s", e)
+        # Initialize components — each wrapped individually so one failure
+        # doesn't prevent the rest from starting
+        market_data = None
+        exchange = None
+        claude = None
+        grok = None
+        episodic = None
+        semantic = SemanticMemory()
 
-    try:
-        await episodic.initialize()
-    except Exception as e:
-        logger.warning("Database init failed (may work without connection): %s", e)
+        try:
+            semantic.load()
+        except Exception as e:
+            logger.warning("Playbook load failed: %s", e)
 
-    # Crash recovery — reconcile saved state with exchange reality
-    try:
-        from src.core.recovery import RecoveryManager
-        recovery = RecoveryManager()
-        report = await recovery.recover(_working_memory, exchange)
-        if report.actions_taken:
-            logger.info(
-                "Recovery: %d actions taken — %s",
-                len(report.actions_taken), "; ".join(report.actions_taken),
+        try:
+            market_data = MarketDataProvider(settings.exchange.name, sandbox=True)
+            await market_data.initialize()
+        except Exception as e:
+            logger.warning("Market data init failed: %s", e)
+            market_data = None
+
+        try:
+            exchange = AlpacaPaperExchange(paper=True)
+            await exchange.initialize()
+        except Exception as e:
+            logger.warning("Exchange init failed: %s", e)
+            exchange = None
+
+        try:
+            claude = ClaudeProvider(model=settings.llm.claude.model)
+        except Exception as e:
+            logger.warning("Claude init failed: %s", e)
+
+        try:
+            grok = GrokProvider(model=settings.llm.grok.model)
+        except Exception as e:
+            logger.warning("Grok init failed: %s", e)
+
+        try:
+            episodic = EpisodicMemory(settings.database.url)
+            await episodic.initialize()
+        except Exception as e:
+            logger.warning("Database init failed: %s", e)
+            episodic = None
+
+        _working_memory.load_from_disk()
+
+        # Only create trading loop if we have the minimum required components
+        if market_data and exchange and claude and episodic:
+            _trading_loop = TradingLoop(
+                settings=settings,
+                market_data=market_data,
+                exchange=exchange,
+                claude_llm=claude,
+                grok_llm=grok,
+                working_memory=_working_memory,
+                episodic_memory=episodic,
+                semantic_memory=semantic,
+                event_callback=broadcast_event,
             )
+
+            # Crash recovery
+            try:
+                from src.core.recovery import RecoveryManager
+                recovery = RecoveryManager()
+                report = await recovery.recover(_working_memory, exchange)
+                if report.actions_taken:
+                    logger.info("Recovery: %s", "; ".join(report.actions_taken))
+            except Exception as e:
+                logger.warning("Recovery failed: %s", e)
+
+            # Auto-start trading loop
+            _loop_task = asyncio.create_task(_trading_loop.run())
+            logger.info("Trading loop auto-started")
+        else:
+            logger.warning(
+                "Trading loop NOT started — missing components: "
+                "market_data=%s exchange=%s claude=%s db=%s",
+                market_data is not None, exchange is not None,
+                claude is not None, episodic is not None,
+            )
+
+        # Telegram bot (optional)
+        try:
+            _telegram = TelegramNotifier(
+                api_base_url=f"http://127.0.0.1:{settings.dashboard.port}",
+            )
+            await _telegram.start()
+        except Exception as e:
+            logger.warning("Telegram not started: %s", e)
+            _telegram = None
+
     except Exception as e:
-        logger.warning("Recovery failed (continuing with saved state): %s", e)
+        logger.error("Startup error (app will still serve health endpoint): %s", e, exc_info=True)
 
-    _trading_loop = TradingLoop(
-        settings=settings,
-        market_data=market_data,
-        exchange=exchange,
-        claude_llm=claude,
-        grok_llm=grok,
-        working_memory=_working_memory,
-        episodic_memory=episodic,
-        semantic_memory=semantic,
-        event_callback=broadcast_event,
-    )
-
-    # Start Telegram bot (non-blocking — only if token is configured)
-    global _telegram
-    try:
-        _telegram = TelegramNotifier(
-            api_base_url=f"http://127.0.0.1:{settings.dashboard.port}",
-        )
-        await _telegram.start()
-    except Exception as e:
-        logger.warning("Telegram bot not started (token may not be set): %s", e)
-        _telegram = None
-
-    # AUTO-START the trading loop — no human intervention needed
-    _loop_task = asyncio.create_task(_trading_loop.run())
-    logger.info("TradeBot backend ready — trading loop auto-started")
-
+    logger.info("TradeBot backend ready")
     yield
 
-    # Cancel the loop task on shutdown
-    _loop_task.cancel()
-    try:
-        await _loop_task
-    except asyncio.CancelledError:
-        pass
-
     # Shutdown
+    if _loop_task:
+        _loop_task.cancel()
+        try:
+            await _loop_task
+        except asyncio.CancelledError:
+            pass
     if _telegram:
-        await _telegram.stop()
+        try:
+            await _telegram.stop()
+        except Exception:
+            pass
     if _trading_loop:
         _trading_loop.stop()
-    await market_data.close()
-    await exchange.close()
-    await claude.close()
-    await grok.close()
-    await episodic.close()
+        try:
+            await _trading_loop.market_data.close()
+            await _trading_loop.exchange.close()
+            await _trading_loop._claude.close()
+            if _trading_loop._grok:
+                await _trading_loop._grok.close()
+            await _trading_loop.episodic.close()
+        except Exception:
+            pass
     from src.data.external_sources import close_client as close_http_client
     await close_http_client()
 
