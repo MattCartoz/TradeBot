@@ -241,6 +241,56 @@ async def get_agent_logs():
     return _working_memory.agent_logs[-50:]
 
 
+@app.get("/api/candles/{symbol}/{timeframe}")
+async def get_candles(symbol: str, timeframe: str, limit: int = 200):
+    """Fetch OHLCV candle data for dashboard charts."""
+    if not _trading_loop:
+        return []
+    # URL-decode symbol: BTC-USD -> BTC/USD
+    decoded_symbol = symbol.replace("-", "/")
+    candles = await _trading_loop.market_data.fetch_candles(
+        decoded_symbol, timeframe, limit=limit, drop_incomplete=True,
+    )
+    return [
+        {
+            "time": int(c.timestamp.timestamp()),
+            "open": c.open,
+            "high": c.high,
+            "low": c.low,
+            "close": c.close,
+            "volume": c.volume,
+        }
+        for c in candles
+    ]
+
+
+@app.get("/api/trades/markers")
+async def get_trade_markers():
+    """Get trade entry/exit points for chart overlay."""
+    if not _trading_loop:
+        return []
+    trades = await _trading_loop.episodic.get_recent_trades(limit=50)
+    markers = []
+    for t in trades:
+        if t.get("opened_at"):
+            markers.append({
+                "time": t["opened_at"],
+                "symbol": t["symbol"],
+                "type": "entry",
+                "side": t["side"],
+                "price": t["entry_price"],
+            })
+        if t.get("closed_at") and t.get("exit_price"):
+            markers.append({
+                "time": t["closed_at"],
+                "symbol": t["symbol"],
+                "type": "exit",
+                "price": t["exit_price"],
+                "pnl": t.get("pnl"),
+            })
+    return markers
+
+
 @app.get("/api/config")
 async def get_config():
     settings = load_settings()
@@ -298,7 +348,7 @@ async def ws_agent_feed(websocket: WebSocket):
 
 @app.websocket("/ws/market-data")
 async def ws_market_data(websocket: WebSocket):
-    """Stream live market data for TradingView charts."""
+    """Stream live ticker updates for dashboard price display."""
     await websocket.accept()
 
     try:
@@ -317,6 +367,24 @@ async def ws_market_data(websocket: WebSocket):
                             "volume": ticker.volume_24h,
                             "timestamp": ticker.timestamp.isoformat(),
                         }, default=str))
+
+                    # Also send latest candle for real-time chart update
+                    candles = await _trading_loop.market_data.fetch_candles(
+                        symbol, "1m", limit=2, drop_incomplete=False,
+                    )
+                    if candles:
+                        c = candles[-1]
+                        await websocket.send_text(json.dumps({
+                            "type": "candle",
+                            "symbol": symbol,
+                            "time": int(c.timestamp.timestamp()),
+                            "open": c.open,
+                            "high": c.high,
+                            "low": c.low,
+                            "close": c.close,
+                            "volume": c.volume,
+                        }, default=str))
+
             await asyncio.sleep(5)
     except WebSocketDisconnect:
         pass
