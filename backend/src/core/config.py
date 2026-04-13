@@ -51,8 +51,22 @@ class LLMConfig(BaseModel):
     grok: LLMModelConfig = LLMModelConfig(model="grok-3")
 
 
+def _get_database_url() -> str:
+    """Get database URL, ensuring it uses asyncpg driver."""
+    url = os.environ.get(
+        "DATABASE_URL",
+        "postgresql+asyncpg://tradebot:tradebot_dev@localhost:5432/tradebot",
+    )
+    # Railway/Neon give postgresql:// but we need postgresql+asyncpg://
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    return url
+
+
 class DatabaseConfig(BaseModel):
-    url: str = "postgresql+asyncpg://tradebot:tradebot_dev@localhost:5432/tradebot"
+    url: str = _get_database_url()
 
 
 class DashboardConfig(BaseModel):

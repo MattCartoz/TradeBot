@@ -126,12 +126,16 @@ async def lifespan(app: FastAPI):
         event_callback=broadcast_event,
     )
 
-    # Start Telegram bot (non-blocking — runs on the same event loop)
+    # Start Telegram bot (non-blocking — only if token is configured)
     global _telegram
-    _telegram = TelegramNotifier(
-        api_base_url=f"http://127.0.0.1:{settings.dashboard.port}",
-    )
-    await _telegram.start()
+    try:
+        _telegram = TelegramNotifier(
+            api_base_url=f"http://127.0.0.1:{settings.dashboard.port}",
+        )
+        await _telegram.start()
+    except Exception as e:
+        logger.warning("Telegram bot not started (token may not be set): %s", e)
+        _telegram = None
 
     # AUTO-START the trading loop — no human intervention needed
     _loop_task = asyncio.create_task(_trading_loop.run())
