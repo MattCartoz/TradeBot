@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pandas as pd
-import pandas_ta as ta
+import pandas_ta_classic as ta
 
 from .data_models import Candle, IndicatorValues
 

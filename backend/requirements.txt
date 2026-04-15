@@ -1,4 +1,4 @@
-# Auto-generated from pyproject.toml — used by Dockerfile for faster builds
+# Auto-generated from pyproject.toml — v2 bust cache
 pydantic>=2.0,<3.0
 pyyaml>=6.0,<7.0
 httpx>=0.27,<1.0
