@@ -23,9 +23,17 @@ from src.llm.grok_provider import GrokProvider
 from src.memory.episodic import EpisodicMemory
 from src.memory.semantic import SemanticMemory
 from src.memory.working import WorkingMemory
-from src.notifications.telegram_bot import TelegramNotifier
 
 logger = logging.getLogger(__name__)
+
+# Lazy import — only fails at runtime if actually used, not at module load
+try:
+    from src.notifications.telegram_bot import TelegramNotifier
+except Exception as _telegram_import_err:
+    TelegramNotifier = None  # type: ignore
+    logging.getLogger(__name__).warning(
+        "Telegram module not available: %s", _telegram_import_err
+    )
 
 # Global state
 _trading_loop: TradingLoop | None = None
@@ -162,12 +170,13 @@ async def lifespan(app: FastAPI):
                 claude is not None, episodic is not None,
             )
 
-        # Telegram bot (optional)
+        # Telegram bot (optional — only if module loaded and token set)
         try:
-            _telegram = TelegramNotifier(
-                api_base_url=f"http://127.0.0.1:{settings.dashboard.port}",
-            )
-            await _telegram.start()
+            if TelegramNotifier is not None:
+                _telegram = TelegramNotifier(
+                    api_base_url=f"http://127.0.0.1:{settings.dashboard.port}",
+                )
+                await _telegram.start()
         except Exception as e:
             logger.warning("Telegram not started: %s", e)
             _telegram = None
