@@ -11,6 +11,7 @@ alpaca-py>=0.30
 anthropic>=0.40
 openai>=1.50
 asyncpg>=0.29,<1.0
+psycopg[binary]>=3.1
 sqlalchemy[asyncio]>=2.0,<3.0
 alembic>=1.13,<2.0
 fastapi>=0.115
