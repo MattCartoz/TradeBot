@@ -21,7 +21,10 @@ WORKDIR /app/backend
 # Create data directory for working memory persistence
 RUN mkdir -p /app/data
 
+# Verify the app can at least import before we try to run it
+RUN python -c "print('Python OK'); from fastapi import FastAPI; print('FastAPI OK')"
+
 EXPOSE 8000
 
 # Use shell form so $PORT env var is expanded (Railway sets PORT dynamically)
-CMD uvicorn src.dashboard.app:app --host 0.0.0.0 --port ${PORT:-8000}
+CMD echo "Starting on port ${PORT:-8000}" && python -c "import src.dashboard.app; print('Import OK')" && uvicorn src.dashboard.app:app --host 0.0.0.0 --port ${PORT:-8000}
